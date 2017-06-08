@@ -113,69 +113,344 @@ function createPresentation(title) {
 }
 
 /**
- * Creates new slide.
+ * Batch create new Slides.
  *
  */
-function createSlide(
+function batchCreateSlides(
+  numSlides,
   presentationId,
-  text,
-  textColor,
-  backgroundColor,
-  fontSize,
-  italic,
-  bold
+  backgroundColor
 ) {
-  var pageId = Utilities.getUuid();
   var bgColorRgb = hexToRgb(backgroundColor);
-  var textColorRgb = hexToRgb(textColor);
+  var pageIds = [];
+  var requests = [];
   
-  var requests = [{
-    "createSlide": {
-      "objectId": pageId,
-      "insertionIndex": 0,
-      "slideLayoutReference": {
-        "predefinedLayout": "BLANK"
+  Logger.log(numSlides);
+  
+  for (var i=0; i<numSlides; i++) {
+    var pageId = Utilities.getUuid();
+    var req = [{
+      "createSlide": {
+        "objectId": pageId,
+        "insertionIndex": i,
+        "slideLayoutReference": {
+          "predefinedLayout": "BLANK"
+        }
       }
-    }
-  },{
-    "updatePageProperties": {
-      "objectId": pageId,
-      "fields": "pageBackgroundFill",
-      "pageProperties": {
-        "pageBackgroundFill": {
-          "solidFill": {
-            "color": {
-              "rgbColor": {
-                "red":   bgColorRgb[0] / 255,
-                "green": bgColorRgb[1] / 255,
-                "blue":  bgColorRgb[2] / 255
+    },{
+      "updatePageProperties": {
+        "objectId": pageId,
+        "fields": "pageBackgroundFill",
+        "pageProperties": {
+          "pageBackgroundFill": {
+            "solidFill": {
+              "color": {
+                "rgbColor": {
+                  "red":   bgColorRgb[0] / 255,
+                  "green": bgColorRgb[1] / 255,
+                  "blue":  bgColorRgb[2] / 255
+                }
               }
             }
           }
         }
       }
-    }
-  }];
+    }];
+    
+    pageIds.push(pageId);
+    requests = requests.concat(req);
+  }
+  
   var slide = Slides.Presentations.batchUpdate({'requests': requests}, presentationId);
   Logger.log("Created Slide with ID: " + slide.replies[0].createSlide.objectId);
   
-  addTextBox(presentationId, pageId, text, fontSize, textColorRgb, italic, bold);
+  return pageIds;
 }
 
 /**
- * Adds new text box with additional settings, including font size,
- * text color, italic, and bold.
- *
- * @param {object} presentationId The ID for the designated slide.
- * @param {object} pageId The ID for the specific page in slide where
- *     the text box is inseted.
- * @param {object} text The text to be inserted into the text box.
- * @param {object} fontSize The font size of the text.
- * @param {Array.<float>} textColor The color assigned to the text, should
- *     be wrapped in an array of RGB color.
- * @param {boolean} italic The boolean value as to if the font should be italic.
- * @param {boolean} bold The boolean value as to if the font should be bold.
+ * Batch add text boxes with texts to slides.
  */
+function batchAddTexts(
+  presentationId,
+  pageIds,
+  lines
+) {
+  var requests = [];
+  var pageElementIds = [];
+  var position;
+  
+  if (getPosition("position") == null) {
+    position = "middle";
+  } else {
+    position = getPosition("position");
+  }
+  
+  for (var i=0; i<pageIds.length; i++) {
+    var pageElementId = Utilities.getUuid();
+    var req = [{
+      "createShape": {
+        "objectId": pageElementId,
+        "shapeType": "TEXT_BOX",
+        "elementProperties": {
+          "pageObjectId": pageIds[i],
+          "size": {
+            "width": {
+              "magnitude": 720,
+              "unit": "PT"
+            },
+            "height": {
+              "magnitude": 100,
+              "unit": "PT"
+            }
+          },
+          "transform": {
+            "scaleX": 1,
+            "scaleY": 1,
+            "translateX": 0,
+            "translateY": positions[position],
+            "unit": "PT"
+          }
+        }
+      }
+    }, {
+      "insertText": {
+        "objectId": pageElementId,
+        "text": lines[i],
+        "insertionIndex": 0
+      }
+    }, {
+      "updateSlidesPosition": {
+        "slideObjectIds": [
+          pageIds[i]
+        ],
+        "insertionIndex": i
+      }
+    }, {
+      "updateParagraphStyle": {
+        "objectId": pageElementId,
+        "fields": "alignment",
+        "style": {
+          "alignment": "CENTER"
+        }
+      }
+    }];
+    pageElementIds.push(pageElementId);
+    requests = requests.concat(req);
+  }
+  var response = Slides.Presentations.batchUpdate({'requests': requests}, presentationId);
+  Logger.log("Created Textboxes with ID: " + response.replies[0].createShape.objectId);
+  
+  return pageElementIds;
+}
+
+/**
+ * Batch update all the text boxes.
+ */
+function batchUpdateTextStyle(
+  elementIds, 
+  presentationId,
+  textColor,
+  bold, 
+  italic, 
+  fontSize
+) {
+  var requests = [];
+  var textColorRgb = hexToRgb(textColor);
+  
+  for (var j=0; j<elementIds.length; j++) {
+    var r = [{
+      "updateTextStyle": {
+        "objectId": elementIds[j],
+        "fields": "foregroundColor,bold,italic,fontFamily,fontSize,underline",
+        "style": {
+          "foregroundColor": {
+            "opaqueColor": {
+              "rgbColor": {
+                "red":   textColorRgb[0] / 255.0,
+                "green": textColorRgb[1] / 255.0,
+                "blue":  textColorRgb[2] / 255.0,
+              }
+            }
+          },
+          "bold": bold,
+          "italic": italic,
+          "underline": false,
+          "fontFamily": "Consolas",
+          "fontSize": {
+            "magnitude": fontSize,
+            "unit": "PT"
+          }
+        },
+        "textRange": {
+          "type": "ALL"
+        }
+      }
+    }];
+    requests = requests.concat(r);
+  }
+  
+  var res = Slides.Presentations.batchUpdate({'requests': requests}, presentationId);
+}
+
+/**
+ * Get email body to construct message.
+ */
+function getEmailBody(fileId) {
+  var head = HtmlService.createHtmlOutputFromFile("Email_head").getContent();
+  var tail = HtmlService.createHtmlOutputFromFile("Email_tail").getContent();
+  var fileLink = "<a href='https://docs.google.com/presentation/d/"+fileId+"' target='_blank'>Open in Google Slides</a>";
+  var email = head + fileLink + tail;
+  
+  return email;
+}
+
+/**
+ * Sending email to the session user.
+ */
+function sendEmail(fileId) {
+  var email = Session.getActiveUser().getEmail();
+  var emailBody = getEmailBody(fileId);
+  var userName = DriveApp.getFileById(fileId).getOwner().getName();
+  
+  MailApp.sendEmail({
+    to: email,
+    subject: "Hi "+userName+", here's your new slide created by autocuerr",
+    htmlBody: emailBody
+  });
+}
+
+/**
+ * Sharing the newly created slide by email.
+ */
+function shareFileById(fileId, emails) {
+  var file = DriveApp.getFileById(fileId);
+  file.addEditors(emails);
+}
+
+/**
+ * Getting session user's contacts email.
+ */
+function getContactsEmails() {
+  var contacts = ContactsApp.getContacts();
+  var emails = [];
+  
+  for (var i in contacts) {
+    var contactEmails = contacts[i].getEmails();
+    for (var j in contactEmails) {
+      emails.push(contactEmails[j].getAddress());
+    }
+  }
+  
+  return emails;
+}
+
+/**
+ * Getting session user's contact email by name.
+ */
+function getContactsEmailByName(name) {
+  var contacts = ContactsApp.getContactsByName(name);
+  var emails = [];
+  
+  for (var i in contacts) {
+    var contactEmails = contacts[i].getEmails();
+    for (var j in contactEmails) {
+      emails.push(contactEmails[j].getAddress());
+    }
+  }
+  return emails;
+}
+
+/**
+ * Getting session user's contact email by email.
+ */
+function getContactEmailByEmail(email) {
+  var contacts = ContactsApp.getContactsByEmailAddress(email);
+  var emails = [];
+  
+  for (var i in contacts) {
+    var contactEmails = contacts[i].getEmails();
+    for (var j in contactEmails) {
+      emails.push(contactEmails[j].getAddress());
+    }
+  }
+  return emails;
+}
+
+/**
+ * The main function that evokes the slide creation
+ *
+ * @param {string} textColor The color hex string that is assigned to the text.
+ * @param {string} backgroundColor The color hex string that is assigned to the background.
+ * @param {int} fontSize The int value indicates the font size.
+ * @param {boolean} italic The boolean value that sets the text to be italic.
+ * @param {boolean} bold The boolean value that sets the text to be bold.
+ * @param {boolean} sendMe The boolean value that sets if user would like to receive a copy.
+ * @param {Array.<string>} emails The array that stores the emails for sharing the slide.
+ */
+function main(
+  textColor, 
+  backgroundColor, 
+  fontSize, 
+  italic, 
+  bold,
+  sendMe,
+  emails
+) {
+  var doc = DocumentApp.getActiveDocument();
+  var title = doc.getName();
+  var text = doc.getBody().getText();
+  var len = text.length;
+  var lines = [];
+  var line = "";
+  
+  if (text.length == 0) throw new Error("I cannot work without giving me any lyrics, please enter the lyrics so that I can sing.");
+  
+  for (var i = 0; i < len; i++) {
+    if (text[i] != "\n" && text[i] != "\r\n") {
+      line = line.concat(text.charAt(i));
+    } else {
+      if (line.length) {
+        lines.push(line);
+        line = "";
+      }
+    }
+  }
+  
+  // Adding the last line into the array
+  if (line.length > 0) lines.push(line);
+  
+  var presentationId = createPresentation(title);
+  var slideIds = batchCreateSlides(lines.length, presentationId, backgroundColor);
+  var pageElementIds = batchAddTexts(presentationId, slideIds, lines);
+  batchUpdateTextStyle(pageElementIds, presentationId, textColor, bold, italic, fontSize);
+  
+  if (sendMe) sendEmail(presentationId);
+  if (emails.length) shareFileById(presentationId, emails);
+  
+  // Returning the presentation ID to generate the link for opening the slide.
+  return presentationId;
+}
+
+/**
+ * Test functions.
+ */
+
+function testGetContacts() {
+  Logger.log(getContactsEmails());
+}
+  
+function testGetPosition() {
+  var r = getPosition("position");
+  Logger.log(r);
+}
+
+function testGetPositionEnum() {
+  Logger.log(positions["middle"]);
+}
+
+/**
+ * @Deprecated
+ * -------------------------------------------------------------------------------
 function addTextBox(
   presentationId,
   pageId,
@@ -265,156 +540,59 @@ function addTextBox(
   Logger.log("Created Textbox with ID: " + response.replies[0].createShape.objectId);
 }
 
-function getEmailBody(fileId) {
-  var head = HtmlService.createHtmlOutputFromFile("Email_head").getContent();
-  var tail = HtmlService.createHtmlOutputFromFile("Email_tail").getContent();
-  var fileLink = "<a href='https://docs.google.com/presentation/d/"+fileId+"' target='_blank'>Open in Google Slides</a>";
-  var email = head + fileLink + tail;
-  
-  return email;
-}
-
-function sendEmail(fileId) {
-  var email = Session.getActiveUser().getEmail();
-  var emailBody = getEmailBody(fileId);
-  var userName = DriveApp.getFileById(fileId).getOwner().getName();
-  
-  MailApp.sendEmail({
-    to: email,
-    subject: "Hi "+userName+", here's your new slide created by autocuerr",
-    htmlBody: emailBody
-  });
-}
-
-function shareFileById(fileId, emails) {
-  var file = DriveApp.getFileById(fileId);
-  file.addEditors(emails);
-}
-
-function getContactsEmails() {
-  var contacts = ContactsApp.getContacts();
-  var emails = [];
-  
-  for (var i in contacts) {
-    var contactEmails = contacts[i].getEmails();
-    for (var j in contactEmails) {
-      emails.push(contactEmails[j].getAddress());
-    }
-  }
-  
-  return emails;
-}
-
-function getContactsEmailByName(name) {
-  var contacts = ContactsApp.getContactsByName(name);
-  var emails = [];
-  
-  for (var i in contacts) {
-    var contactEmails = contacts[i].getEmails();
-    for (var j in contactEmails) {
-      emails.push(contactEmails[j].getAddress());
-    }
-  }
-  return emails;
-}
-
-function getContactEmailByEmail(email) {
-  var contacts = ContactsApp.getContactsByEmailAddress(email);
-  var emails = [];
-  
-  for (var i in contacts) {
-    var contactEmails = contacts[i].getEmails();
-    for (var j in contactEmails) {
-      emails.push(contactEmails[j].getAddress());
-    }
-  }
-  return emails;
-}
-
-/**
- * The main function that evokes the slide creation
- *
- * @param {string} textColor The color hex string that is assigned to the text.
- * @param {string} backgroundColor The color hex string that is assigned to the background.
- * @param {int} fontSize The int value indicates the font size.
- * @param {boolean} italic The boolean value that sets the text to be italic.
- * @param {boolean} bold The boolean value that sets the text to be bold.
- * @param {boolean} sendMe The boolean value that sets if user would like to receive a copy.
- * @param {Array.<string>} emails The array that stores the emails for sharing the slide.
- */
-function main(
-  textColor, 
-  backgroundColor, 
-  fontSize, 
-  italic, 
-  bold,
-  sendMe,
-  emails
+function createSlide(
+  presentationId,
+  text,
+  textColor,
+  backgroundColor,
+  fontSize,
+  italic,
+  bold
 ) {
-  var doc = DocumentApp.getActiveDocument();
-  var title = doc.getName();
-  var text = doc.getBody().getText();
-  var len = text.length;
-  var lines = [];
-  var line = "";
+  var pageId = Utilities.getUuid();
+  var bgColorRgb = hexToRgb(backgroundColor);
+  var textColorRgb = hexToRgb(textColor);
+  var pageElementId = Utilities.getUuid();
+  var position;
   
-  if (text.length == 0) {
-    throw new Error("I cannot work without giving me any lyrics, please enter the lyrics so that I can sing.");
+  if (getPosition("position") == null) {
+    position = "middle";
+  } else {
+    position = getPosition("position");
   }
   
-  for (var i = 0; i < len; i++) {
-    if (text[i] != "\n" && text[i] != "\r\n") {
-      line = line.concat(text.charAt(i));
-    } else {
-      if (line.length) {
-        lines.push(line);
-        line = "";
+  var requests = [{
+    "createSlide": {
+      "objectId": pageId,
+      "insertionIndex": 0,
+      "slideLayoutReference": {
+        "predefinedLayout": "BLANK"
       }
     }
-  }
-  // Adding the last line into the array
-  if (line.length > 0) {
-    lines.push(line);
-  }
+  },{
+    "updatePageProperties": {
+      "objectId": pageId,
+      "fields": "pageBackgroundFill",
+      "pageProperties": {
+        "pageBackgroundFill": {
+          "solidFill": {
+            "color": {
+              "rgbColor": {
+                "red":   bgColorRgb[0] / 255,
+                "green": bgColorRgb[1] / 255,
+                "blue":  bgColorRgb[2] / 255
+              }
+            }
+          }
+        }
+      }
+    }
+  }];
+  var slide = Slides.Presentations.batchUpdate({'requests': requests}, presentationId);
+  Logger.log("Created Slide with ID: " + slide.replies[0].createSlide.objectId);
   
-  var presentationId = createPresentation(title);
-  for (var i=lines.length-1; i>=0; i--) {
-    createSlide(
-      presentationId,
-      lines[i],
-      textColor,
-      backgroundColor,
-      fontSize,
-      italic,
-      bold
-    );
-  }
-  
-  if (sendMe) {
-    sendEmail(presentationId);
-  }
-  
-  if (emails.length) {
-    shareFileById(presentationId, emails);
-  }
-  
-  // Returning the presentation ID to generate the link for opening the slide.
-  return presentationId;
+  addTextBox(presentationId, pageId, text, fontSize, textColorRgb, italic, bold);
 }
-
-/**
- * Test functions.
+ * ----------------------------------------------------------------------------------------
+ * @ End of deprecated methods
  */
-
-function testGetContacts() {
-  Logger.log(getContactsEmails());
-}
-  
-function testGetPosition() {
-  var r = getPosition("position");
-  Logger.log(r);
-}
-
-function testGetPositionEnum() {
-  Logger.log(positions["middle"]);
-}

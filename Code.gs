@@ -363,7 +363,7 @@ function main(
   }
   
   for (var i = 0; i < len; i++) {
-    if (text[i] != '\n') {
+    if (text[i] != "\n" && text[i] != "\r\n") {
       line = line.concat(text.charAt(i));
     } else {
       if (line.length) {

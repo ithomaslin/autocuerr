@@ -409,6 +409,7 @@ function main(
     if (text[i] != "\n" && text[i] != "\r\n") {
       line = line.concat(text.charAt(i));
     } else {
+      line = line.trim();
       if (line.length) {
         lines.push(line);
         line = "";

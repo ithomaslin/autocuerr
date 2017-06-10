@@ -165,7 +165,6 @@ function batchCreateSlides(
   }
   
   var slide = Slides.Presentations.batchUpdate({'requests': requests}, presentationId);
-  Logger.log("Created Slide with ID: " + slide.replies[0].createSlide.objectId);
   
   return pageIds;
 }
@@ -301,7 +300,8 @@ function batchUpdateTextStyle(
 function getEmailBody(fileId) {
   var head = HtmlService.createHtmlOutputFromFile("Email_head").getContent();
   var tail = HtmlService.createHtmlOutputFromFile("Email_tail").getContent();
-  var fileLink = "<a href='https://docs.google.com/presentation/d/"+fileId+"' target='_blank'>Open in Google Slides</a>";
+  var fileLink = "<a href='https://docs.google.com/presentation/d/" + 
+      fileId + "' target='_blank'>Open in Google Slides</a>";
   var email = head + fileLink + tail;
   
   return email;
@@ -406,7 +406,9 @@ function main(
   var lines = [];
   var line = "";
   
-  if (text.length == 0) throw new Error("I cannot work without giving me any lyrics, please enter the lyrics so that I can sing.");
+  if (text.length == 0) throw new Error(
+    "I cannot work without giving me any lyrics, please enter the lyrics so that I can sing."
+  );
   
   for (var i = 0; i < len; i++) {
     if (text[i] != "\n" && text[i] != "\r\n") {

@@ -17,9 +17,6 @@ var positions = {
  *     running in, inspect e.authMode.
  */
 function onOpen(e) {
-  var prop = PropertiesService.getUserProperties();
-  prop.setProperty("position", 'middle');
-  
   DocumentApp.getUi().createAddonMenu()
       .addItem('Start', 'showSidebar')
       .addToUi();
@@ -48,6 +45,9 @@ function onInstall(e) {
 function showSidebar() {
   var ui = HtmlService.createHtmlOutputFromFile('Sidebar').setTitle('autocuerr');
   DocumentApp.getUi().showSidebar(ui);
+  
+  var prop = PropertiesService.getUserProperties();
+  prop.setProperty("position", 'middle');
 }
 
 /**
